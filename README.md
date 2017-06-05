@@ -1,8 +1,8 @@
 # MediaGrabber
 MediaGrabber is a commandline tool intended to run as a scheduled task which collects photos/videos from different 
 source directories into a target directory, renames them by their EXIF create date and stores them in a folder structure
-based on the their creation dates - while keeping records of sources and target files in an index file (database) to
-speed up things for the next runs.
+based on their creation dates - while keeping records of sources and target files in an index file (database) to
+speed up things for the following runs.
 
 ## Usage / Command line Options
 The following commandline options and flags control the tool's behavior 
