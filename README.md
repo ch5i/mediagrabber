@@ -28,7 +28,7 @@ Option | Long | Value | Description
     ```
     python3 ./mediagrabber.py
     -m import 
-    -s "C:\Users\Thomas\Dropbox\Camera-Uploads"
+    -s "C:\Users\Thomas\Dropbox\Camera-Uploads" "C:\Users\Thomas\Other Photos"
     -t "C:\Users\Thomas\Photos\My awesome photo collection"
     -e jpg jpeg
     -i "Camera-Uploads\old images" archive .svn
