@@ -17,7 +17,7 @@ Option | Long | Value | Description
 -e | --extensions | *list of file extensions, separated by spaces* | list of file extensions to import to target (default: jpg)
 -i | --ignore-dirs | *list of patterns, separated by spaces* | exclude patterns to filter subdirectories which should not be imported
 -r | --remove-sources | `none` | move (instead of copy) files from source to target
--p | --probe | `none` | do no touch files - preview only)
+-p | --probe | `none` | do no touch files - preview only
 -q | --quiet | `none` | no processing output to console
 -d | --debug | `none` | create detailed debug logfile
 
