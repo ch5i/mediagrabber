@@ -623,6 +623,7 @@ class MediaGrabber:
                         self.logger.info('moved file <' + source + '> to <' + target + '>')
 
                         # TODO: remove directory, if it is empty after moving out the file
+                        # if os.listdir(work_path) == []:
 
                     else:
                         shutil.copy(source, target)
