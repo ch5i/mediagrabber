@@ -31,10 +31,11 @@ class MediaGrabber:
 
     def __init__(self, logger=None):
         self.logger = logger or logging.getLogger(__name__)
-        self.import_mode = True  # add sources and copy/move files
+        self.indexing_mode = False  # default mode is import, not indexing
         self.simulate = False
         self.debug = False
         self.quiet = False
+        self.verbose = False
         self.move = False
         self.mode = 'import'
         self.source_dirs = []
@@ -44,37 +45,25 @@ class MediaGrabber:
         self.db_file = '.mediagrabber.db'
         self.location = os.path.dirname(os.path.abspath(__file__))
 
-        # stats counters
-        self.stats = namedtuple('stats',
-                                ['file_count', 'db_count', 'skipped_files', 'removed_db_entries', 'total_time_file',
-                                 'total_time_db'])
-        self.stats.file_count = 0
-        self.stats.db_count = 0
-        self.stats.skipped_files = 0
-        self.stats.removed_db_entries = 0
-        self.stats.total_time_file = 0
-        self.stats.total_time_db = 0
+        # initialize stats
+        self._init_stats()
 
         # check config and arguments
         self._read_config()
         self._read_arguments()
 
-        # set up loggers
-        self._add_log_handler_console()
-        self._add_log_handler_file_info()
-        if self.debug:
-            self._add_log_handler_file_debug()
-        self.logger.debug("loggers started")
+        self._setup_loggers()
 
         self.logger.debug('Init MediaGrabber')
 
         self.logger.info('mediagrabber starting')
-
-        # check encodings (i.e. fs enc. = utf-8?)
-        self._check_encodings()
+        self.logger.info('')
 
         # record run params in log
         self._log_run_parameters()
+
+        # check encodings (i.e. fs enc. = utf-8?)
+        self._check_encodings()
 
         # check directories
         self._check_target_dir()
@@ -92,17 +81,45 @@ class MediaGrabber:
         # clean up
         self.db.disconnect()
 
+    def _init_stats(self):
+        # set up stats counters
+        self.stats = namedtuple('stats',
+                                ['file_count', 'db_count', 'skipped_files', 'removed_db_entries', 'total_time_file',
+                                 'total_time_db'])
+        self.stats.file_count = 0
+        self.stats.db_count = 0
+        self.stats.skipped_files = 0
+        self.stats.removed_db_entries = 0
+        self.stats.total_time_file = 0
+        self.stats.total_time_db = 0
+
+    def _setup_loggers(self):
+        # set up loggers
+        self._add_log_handler_console()
+        self._add_log_handler_file_info()
+        if self.debug:
+            self._add_log_handler_file_debug()
+        self.logger.debug("loggers set up")
+
     def _check_target_dir(self):
         if self.target_dir is None or not os.path.exists(self.target_dir):
             error_no_target = 'cannot access target directory: <' + str(self.target_dir) + '> - exiting...'
             self.logger.error(error_no_target)
-            sys.exit()
+            sys.exit(error_no_target)
 
     def _check_source_dirs(self):
-        if len(self.source_dirs) > 0:
+        if self.source_dirs is not None and len(self.source_dirs) > 0:
             for source_dir in self.source_dirs:
                 if source_dir is not None and not os.path.exists(source_dir):
                     self.logger.warning('source directory is not accessible: <' + source_dir + '>')
+        else:
+            no_sources = 'no source directories specified!'
+            if self.mode == 'import':
+                no_sources = no_sources + ' - exiting...'
+                self.logger.error(no_sources)
+                sys.exit(no_sources)
+            else:
+                self.logger.warning(no_sources)
 
     def _check_encodings(self):
         """
@@ -193,6 +210,7 @@ class MediaGrabber:
         Show call parameters
         """
         self.logger.info('run parameters:')
+        self.logger.info('---')
         self.logger.info('> mode       = %s', self.mode)
         self.logger.info('> sources    = %s', self.source_dirs)
         self.logger.info('> target     = %s', self.target_dir)
@@ -201,6 +219,7 @@ class MediaGrabber:
         self.logger.info('> move       = %s', self.move)
         self.logger.info('> dryrun     = %s', self.simulate)
         self.logger.info('> quiet      = %s', self.quiet)
+        self.logger.info('---')
 
     def _read_config(self, config_file=None):
         """
@@ -257,22 +276,13 @@ class MediaGrabber:
                             help='if this option is added, source files are moved to target (instead of copied)!')
         parser.add_argument('-p', '--probe', action='store_true', dest='sim',
                             help='probe: do no touch files - preview only')
+        parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False,
+                            help='verbose: output more information, e.g. skipped files')
         parser.add_argument('-q', '--quiet', action='store_true', dest='quiet', default=False,
                             help='quiet: no processing output to console')
         parser.add_argument('-d', '--debug', action='store_true', dest='debug',
                             help='debug: create detailed debug logfile')
         args = parser.parse_args()
-
-        self.logger.debug('arguments:')
-        self.logger.debug('> mode       = %s', args.mode)
-        self.logger.debug('> sources    = %s', args.source_dirs)
-        self.logger.debug('> target     = %s', args.target_dir)
-        self.logger.debug('> extensions = %s', args.file_extensions)
-        self.logger.debug('> ignored    = %s', args.ignore_dirs)
-        self.logger.debug('> move       = %s', args.move)
-        self.logger.debug('> dryrun     = %s', args.sim)
-        self.logger.debug('> quiet      = %s', args.quiet)
-        self.logger.debug('> debug      = %s', args.debug)
 
         self.mode = args.mode
         self.source_dirs = args.source_dirs
@@ -282,13 +292,8 @@ class MediaGrabber:
         self.move = args.move
         self.simulate = args.sim
         self.quiet = args.quiet
+        self.verbose = args.verbose
         self.debug = args.debug
-
-        if not args.source_dirs:
-            self.logger.info('> sources not specified - using source dirs from config')
-
-        if not args.target_dir:
-            self.logger.info('> target not specified - using target dir from config')
 
     @staticmethod
     def _filter_file_by_ext(the_file, filter_ext=None):
@@ -358,7 +363,7 @@ class MediaGrabber:
         :return:
         """
         self.logger.info('checking for non-indexed files in target...')
-        self.import_mode = False
+        self.indexing_mode = True
         dir_list = [self.target_dir]
         self._process_files(dir_list)
 
@@ -373,7 +378,7 @@ class MediaGrabber:
 
         if nof_db_files > 0:
             self.logger.info('validating ' + str(nof_db_files) + ' target records...')
-            self.logger.info('---')
+            self._selective_logger('---')
 
             file_count = 0
             removed_count = 0
@@ -384,22 +389,23 @@ class MediaGrabber:
                 file_count += 1
                 self.logger.debug(db_file)
                 fn = os.path.join(self.target_dir, db_file['relative_path'], db_file['filename'])
-                self.logger.info(
+                self._selective_logger(
                     '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
                 if not os.path.isfile(fn):
-                    self.logger.info('file does not exist - dropping target record')
+                    self._selective_logger('file does not exist - dropping target record')
                     # delete record
                     self.db.drop_target_record(db_file['file_id'])
                     removed_count += 1
                 else:
-                    self.logger.info("ok - file exists in target")
+                    self._selective_logger("ok - file exists in target")
 
                 end = timer()
                 processing_time = end - start
                 total_time += processing_time
 
-                self.logger.info('time: %ss / total: %ss', format(processing_time, '.3f'), format(total_time, '.2f'))
-                self.logger.info('---')
+                self._selective_logger('time: %ss / total: %ss', format(processing_time, '.3f'),
+                                       format(total_time, '.2f'))
+                self._selective_logger('---')
 
             self.logger.info('...done, checked %s entries in %ss and removed %s entries', str(file_count),
                              format(total_time, '.3f'), str(removed_count))
@@ -421,9 +427,21 @@ class MediaGrabber:
 
         :return:
         """
-        self.import_mode = True
+        self.indexing_mode = False
         self.logger.info('start processing files...')
         self._process_files(self.source_dirs)
+
+    def _selective_logger(self, *args, **kwargs):
+        """
+        wrapper for self.logger to limit amount of log messages if not in verbose mode
+        :param args: pass on arguments
+        :param kwargs: pass on keyword arguments
+        :return:
+        """
+        log_level = 'debug'
+        if self.verbose is True:
+            log_level = 'info'
+        getattr(self.logger, log_level)(*args, **kwargs)
 
     def _process_files(self, list_of_dirs):
         """
@@ -439,7 +457,7 @@ class MediaGrabber:
         file_count = 0
         skipped_count = 0
 
-        self.logger.info('---')
+        self._selective_logger('---')
 
         # iterate over source dirs
         for my_path in list_of_dirs:
@@ -452,18 +470,19 @@ class MediaGrabber:
 
             my_path = os.path.abspath(my_path)
 
-            self.logger.info('getting list of files in "' + my_path + '" ...')
+            self._selective_logger('getting list of files in "' + my_path + '" ...')
             file_list = self._get_file_list(my_path)
 
             nof_files = len(file_list)
 
             if nof_files > 0:
-                self.logger.info('found ' + str(nof_files) + ' files to process (' + str(file_count + 1) + ' - ' + str(
-                    file_count + nof_files) + ')')
+                self._selective_logger(
+                    'found ' + str(nof_files) + ' files to process (' + str(file_count + 1) + ' - ' + str(
+                        file_count + nof_files) + ')')
             else:
                 self.logger.info('directory contains no files for processing')
 
-            self.logger.info('---')
+            self._selective_logger('---')
 
             # iterate over source files and import new files to target
             for my_file in file_list:
@@ -471,13 +490,13 @@ class MediaGrabber:
                 file_count += 1
                 emf = None
 
-                self.logger.info('[' + str(file_count) + '] : ' + my_file)
+                self._selective_logger('[' + str(file_count) + '] : ' + my_file)
 
                 # check if source filename exists in db
-                if self.import_mode is True and self.db.source_exists(my_file):
+                if self.indexing_mode is False and self.db.source_exists(my_file):
                     # is known source, skip
                     skipped_count += 1
-                    self.logger.info('file is a known source - skipping')
+                    self._selective_logger('file is a known source - skipping')
                 else:
                     # if not known: get file info (without md5, to save time)
                     emf = ExifMediaFile(my_file, et)
@@ -492,11 +511,10 @@ class MediaGrabber:
                             emf.calculate_md5()
                             if self.db.target_hash_matches(emf):
                                 # md5 match: file is duplicate
-                                self.logger.info(
-                                    'file is already in target (' + emf.get_target_filename() + ')')
+                                self._selective_logger('file is already in target (' + emf.get_target_filename() + ')')
                                 # add source entry for this file
-                                if self.import_mode is True:
-                                    self.logger.info('added as new source')
+                                if self.indexing_mode is False:
+                                    self._selective_logger('added as new source')
                                     self.db.add_source(emf)
                                     # skip (no file operation)
                                 else:
@@ -538,8 +556,9 @@ class MediaGrabber:
                 processing_time = end - start
                 total_time += processing_time
 
-                self.logger.info('time: %ss / total: %ss', format(processing_time, '.3f'), format(total_time, '.2f'))
-                self.logger.info('---')
+                self._selective_logger('time: %ss / total: %ss', format(processing_time, '.3f'),
+                                       format(total_time, '.2f'))
+                self._selective_logger('---')
 
         # update stats counters
         self.stats.total_time_file += total_time
@@ -556,38 +575,41 @@ class MediaGrabber:
         self._show_stats()
 
     def _show_stats(self):
-        # display some stats
-        self.logger.info('processing stats:')
-        self.logger.info('---')
 
-        # files
-        if self.stats.file_count > 0:
-            self.logger.info('files')
-            self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files))
-            self.logger.info('> skipped          : %s', str(self.stats.skipped_files))
-            self.logger.info('> total            : %s', str(self.stats.file_count))
-            self.logger.info('> avg. time/file   : %ss',
-                             format(self.stats.total_time_file / self.stats.file_count, '.3f'))
-            self.logger.info('> total time       : %ss', format(self.stats.total_time_file, '.2f'))
+        if self.stats.db_count > 0 or self.stats.file_count > 0:
+            # display some stats
+            self.logger.info('processing stats:')
             self.logger.info('---')
 
-        # db records (validation)
-        if self.stats.db_count > 0:
-            self.logger.info('target records')
-            self.logger.info('> validated        : %s', str(self.stats.db_count))
-            self.logger.info('> removed          : %s', str(self.stats.removed_db_entries))
-            self.logger.info('> avg. time/record : %ss', format(self.stats.total_time_db / self.stats.db_count, '.3f'))
-            self.logger.info('> total time       : %ss', format(self.stats.total_time_db, '.2f'))
-            self.logger.info('---')
+            # files
+            if self.stats.file_count > 0:
+                self.logger.info('files')
+                self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files))
+                self.logger.info('> skipped          : %s', str(self.stats.skipped_files))
+                self.logger.info('> total            : %s', str(self.stats.file_count))
+                self.logger.info('> avg. time/file   : %ss',
+                                 format(self.stats.total_time_file / self.stats.file_count, '.3f'))
+                self.logger.info('> total time       : %ss', format(self.stats.total_time_file, '.2f'))
+                self.logger.info('---')
 
-        # total time
-        if self.stats.db_count > 0 and self.stats.file_count > 0:
-            self.logger.info('overall')
-            self.logger.info('> total objects     : %s',
-                             str(self.stats.file_count + self.stats.db_count))
-            self.logger.info('> total time        : %ss',
-                             format(self.stats.total_time_file + self.stats.total_time_db, '.2f'))
-            self.logger.info('---')
+            # db records (validation)
+            if self.stats.db_count > 0:
+                self.logger.info('target records')
+                self.logger.info('> validated        : %s', str(self.stats.db_count))
+                self.logger.info('> removed          : %s', str(self.stats.removed_db_entries))
+                self.logger.info('> avg. time/record : %ss',
+                                 format(self.stats.total_time_db / self.stats.db_count, '.3f'))
+                self.logger.info('> total time       : %ss', format(self.stats.total_time_db, '.2f'))
+                self.logger.info('---')
+
+            # total time
+            if self.stats.db_count > 0 and self.stats.file_count > 0:
+                self.logger.info('overall')
+                self.logger.info('> total objects     : %s',
+                                 str(self.stats.file_count + self.stats.db_count))
+                self.logger.info('> total time        : %ss',
+                                 format(self.stats.total_time_file + self.stats.total_time_db, '.2f'))
+                self.logger.info('---')
 
     def _insert_new_target_file(self, emf):
 
@@ -598,41 +620,48 @@ class MediaGrabber:
         # add db record for file
         self.db.add_file(emf)
 
-        # add sources and move files if import mode is on
-        if self.import_mode is True:
-
+        # add sources
+        if self.indexing_mode is False:
             self.db.add_source(emf)
 
-            # move/copy physical file
-            source = os.path.abspath(emf.get_full_source_path())
-            target_path = os.path.abspath(os.path.join(self.target_dir, emf.get_target_path()))
-            target = os.path.join(target_path, emf.get_target_filename())
+        # move/copy physical file
+        source = os.path.abspath(emf.get_full_source_path())
+        target_path = os.path.abspath(os.path.join(self.target_dir, emf.get_target_path()))
+        target = os.path.join(target_path, emf.get_target_filename())
 
-            # just a dry run?
-            if not self.simulate:
-                if not os.path.exists(target_path):
-                    os.makedirs(target_path)
-                    self.logger.debug('created  dir <' + target_path + '>')
+        # dry run?
+        if not self.simulate:
+            if not os.path.exists(target_path):
+                os.makedirs(target_path)
+                self.logger.debug('created  dir <' + target_path + '>')
+
+            if source != target:
 
                 if os.path.isfile(target):
-                    self.logger.warning('physical file <' + target + '> already exists in target!')
-                else:
+                    self.logger.warning('physical file <' + source + '> already exists in target:  <' + target + '>!')
 
-                    if self.move is True:
+                    if self.indexing_mode is True:
+                        # target file exists, we're on a copy.
+                        os.remove(source)
+                        self.logger.warning('removed extra copy: <' + source + '>')
+                else:
+                    if self.move is True or self.indexing_mode is True:
                         shutil.move(source, target)
                         self.logger.info('moved file <' + source + '> to <' + target + '>')
 
                         # TODO: remove directory, if it is empty after moving out the file
                         # if os.listdir(work_path) == []:
-
                     else:
                         shutil.copy(source, target)
                         self.logger.info('copied file <' + source + '> to <' + target + '>')
 
                     # TODO: Add return value (success/fail)
                     self.db.update_copy_flags(emf)
-            else:
-                self.logger.info('simulated copy/move of file <' + source + '> to <' + target + '>')
+        else:
+            filemode = 'copy'
+            if self.move is True:
+                filemode = 'move'
+            self.logger.info('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
 
     def _reset_sources(self):
         """
@@ -641,7 +670,7 @@ class MediaGrabber:
         :return:
         """
         self.db.drop_sources()
-        self.logger.info('dropped all source infos')
+        self.logger.info('done - dropped all source infos')
 
     def _get_file_list(self, the_path):
         """

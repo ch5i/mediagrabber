@@ -73,7 +73,7 @@ class MediaFile:
             return c_date
 
     def get_file_size(self):
-        size = os.stat(self.full_path).st_size  # bytes
+        size = os.path.getsize(self.full_path)  # bytes
         return size
 
     def get_full_source_path(self):
