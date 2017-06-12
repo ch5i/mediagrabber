@@ -33,6 +33,7 @@ class MediaGrabber:
         self.logger = logger or logging.getLogger(__name__)
         self.indexing_mode = False  # default mode is import, not indexing
         self.simulate = False
+        self.logfile_name = ''
         self.debug = False
         self.quiet = False
         self.verbose = False
@@ -48,8 +49,7 @@ class MediaGrabber:
         # initialize stats
         self._init_stats()
 
-        # check config and arguments
-        self._read_config()
+        # check arguments
         self._read_arguments()
 
         self._setup_loggers()
@@ -96,7 +96,10 @@ class MediaGrabber:
     def _setup_loggers(self):
         # set up loggers
         self._add_log_handler_console()
-        self._add_log_handler_file_info()
+
+        if self.logfile_name is not None:
+            self._add_log_handler_file()
+
         if self.debug:
             self._add_log_handler_file_debug()
         self.logger.debug("loggers set up")
@@ -119,7 +122,7 @@ class MediaGrabber:
                 self.logger.error(no_sources)
                 sys.exit(no_sources)
             else:
-                self.logger.warning(no_sources)
+                self.logger.debug(no_sources)
 
     def _check_encodings(self):
         """
@@ -191,16 +194,21 @@ class MediaGrabber:
         debug_file_log_handler.setFormatter(debug_file_log_formatter)
         self.logger.parent.addHandler(debug_file_log_handler)
 
-    def _add_log_handler_file_info(self):
+    def _add_log_handler_file(self):
         """
         Add a lof file handler for log level 'info'
         :return:
         """
         # add file handler (info)
-        log_file = os.path.join(self.location, 'mediagrabber.log')
+        if os.path.basename(self.logfile_name) == self.logfile_name:
+            self.logfile_name = os.path.join(self.location, self.logfile_name)
+        else:
+            if not os.path.exists(os.path.dirname(self.logfile_name)):
+                os.makedirs(os.path.dirname(self.logfile_name))
+
         file_log_formatter = logging.Formatter('%(asctime)s  %(levelname)-8s %(message)s',
                                                datefmt='%Y-%m-%d %H:%M:%S')
-        file_log_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+        file_log_handler = logging.FileHandler(self.logfile_name, mode='w', encoding='utf-8')
         file_log_handler.setLevel(logging.INFO)
         file_log_handler.setFormatter(file_log_formatter)
         self.logger.parent.addHandler(file_log_handler)
@@ -218,71 +226,44 @@ class MediaGrabber:
         self.logger.info('> ignored    = %s', self.ignore_subfolder_patterns)
         self.logger.info('> move       = %s', self.move)
         self.logger.info('> dryrun     = %s', self.simulate)
+        self.logger.info('> logfile    = %s', self.logfile_name)
         self.logger.info('> verbose    = %s', self.verbose)
         self.logger.info('> quiet      = %s', self.quiet)
+        self.logger.info('> debug      = %s', self.debug)
         self.logger.info('---')
-
-    def _read_config(self, config_file=None):
-        """
-        Read config settings from config file (into global vars)
-        :param config_file:
-        """
-
-        # TODO: implement config file / remove entirely
-
-        # if not config_file:
-        #     config_file = '../mediagrabber_settings.py'
-
-        # exec(open(config_file).read(), globals())
-
-        self.source_dirs = ['./test']
-        self.target_dir = './target'
-        self.ignore_subfolder_patterns = [
-            r'@eaDir',
-            r'\.svn',
-            r'__'
-        ]
-
-        self.file_extensions = [
-            'jpg',
-            'mov',
-            'mts',
-            'mp4'
-        ]
-
-        # name of the sqlite db file
-        self.db_file = '.mediagrabber.db'
 
     def _read_arguments(self):
         """
         Parse commandline arguments
         """
         parser = argparse.ArgumentParser(description='A media grabber program')
-        parser.add_argument('-m', '--mode', action='store', choices=('import', 'index', 'reset'), default='import',
+        parser.add_argument('-m', '--mode', choices=('import', 'index', 'reset'), default='import',
                             dest='mode',
                             help=(
                                 'import: import files from source dirs to target dir and index \n'
                                 'index: validate/update target index \n'
                                 'reset: reset sources: remove all source infos (but keep target index)'
                             ))
-        parser.add_argument('-s', '--sourcedirs', nargs='*', action='store', dest='source_dirs',
+        parser.add_argument('-s', '--sourcedirs', nargs='+', dest='source_dirs',
                             help='directories to import from (use "" for names with spaces)')
-        parser.add_argument('-t', '--targetdir', nargs='?', action='store', dest='target_dir',
+        parser.add_argument('-t', '--targetdir', dest='target_dir',
                             help='directory to import to (indexed)')
-        parser.add_argument('-e', '--extensions', nargs='*', action='store', default='jpg', dest='file_extensions',
+        parser.add_argument('-e', '--extensions', nargs='+', default='jpg', dest='file_extensions',
                             help='list of file extensions to import (default: jpg)')
-        parser.add_argument('-i', '--ignore-dirs', nargs='*', action='store', dest='ignore_dirs',
+        parser.add_argument('-i', '--ignore-dirs', nargs='+', dest='ignore_dirs',
                             help='dirname patterns for subdirectories which should not be imported')
-        parser.add_argument('-r', '--remove-sources', action='store_true', dest='move',
+        parser.add_argument('-r', '--remove-sources', action='store_true', default=False, dest='move',
                             help='if this option is added, source files are moved to target (instead of copied)!')
-        parser.add_argument('-p', '--probe', action='store_true', dest='sim',
+        parser.add_argument('-p', '--probe', action='store_true', default=False, dest='sim',
                             help='probe: do no touch files - preview only')
-        parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False,
+        parser.add_argument('-l', '--logfile', nargs='?', dest='logfile', const='mediagrabber.log',
+                            help='write logfile (optional: specify logfile)')
+        parser.add_argument('-v', '--verbose', action='store_true', default=False, dest='verbose',
                             help='verbose: output more information, e.g. skipped files')
-        parser.add_argument('-q', '--quiet', action='store_true', dest='quiet', default=False,
-                            help='quiet: no processing output to console')
+        parser.add_argument('-q', '--quiet', action='store_true', default=False, dest='quiet',
+                            help='quiet: suppress all output to console')
         parser.add_argument('-d', '--debug', action='store_true', dest='debug',
-                            help='debug: create detailed debug logfile')
+                            help='debug: write a detailed logfile for debugging')
         args = parser.parse_args()
 
         self.mode = args.mode
@@ -292,6 +273,7 @@ class MediaGrabber:
         self.ignore_subfolder_patterns = args.ignore_dirs
         self.move = args.move
         self.simulate = args.sim
+        self.logfile_name = args.logfile
         self.quiet = args.quiet
         self.verbose = args.verbose
         self.debug = args.debug
@@ -408,7 +390,8 @@ class MediaGrabber:
                                        format(total_time, '.2f'))
                 self._selective_logger('---')
 
-            self.logger.info('...done, checked %s entries in %ss and removed %s entries', str(file_count),
+            self.logger.info('...done')
+            self._selective_logger('checked %s entries in %ss and removed %s entries', str(file_count),
                              format(total_time, '.3f'), str(removed_count))
 
             # update stats counters
@@ -585,9 +568,9 @@ class MediaGrabber:
             # files
             if self.stats.file_count > 0:
                 self.logger.info('files')
+                self.logger.info('> total            : %s', str(self.stats.file_count))
                 self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files))
                 self.logger.info('> skipped          : %s', str(self.stats.skipped_files))
-                self.logger.info('> total            : %s', str(self.stats.file_count))
                 self.logger.info('> avg. time/file   : %ss',
                                  format(self.stats.total_time_file / self.stats.file_count, '.3f'))
                 self.logger.info('> total time       : %ss', format(self.stats.total_time_file, '.2f'))
