@@ -650,7 +650,7 @@ class MediaGrabber:
             filemode = 'copy'
             if self.move is True:
                 filemode = 'move'
-            self.logger.info('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
+            self._selective_logger('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
 
     def _remove_dir_if_empty(self, source):
         if self.move is True:
