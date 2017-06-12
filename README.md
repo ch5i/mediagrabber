@@ -19,6 +19,7 @@ Option | Long | Value | Description
 -r | --remove-sources | `none` | move (instead of copy) files from source to target
 -p | --probe | `none` | do no touch files - preview only
 -q | --quiet | `none` | no processing output to console
+-v | --verbose | `none` | output verbose processing information to console
 -d | --debug | `none` | create detailed debug logfile
 
 
