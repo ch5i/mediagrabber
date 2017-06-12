@@ -392,7 +392,7 @@ class MediaGrabber:
 
             self.logger.info('...done')
             self._selective_logger('checked %s entries in %ss and removed %s entries', str(file_count),
-                             format(total_time, '.3f'), str(removed_count))
+                                   format(total_time, '.3f'), str(removed_count))
 
             # update stats counters
             self.stats.total_time_db += total_time
@@ -626,15 +626,17 @@ class MediaGrabber:
 
                     if self.indexing_mode is True:
                         # target file exists, we're on a copy.
-                        os.remove(source)
-                        self.logger.warning('removed extra copy: <' + source + '>')
+                        self.logger.info('found extra copy: <' + source + '>')
+                        # TODO: add option to prune extra copies
                 else:
                     if self.move is True or self.indexing_mode is True:
                         shutil.move(source, target)
                         self.logger.info('moved file <' + source + '> to <' + target + '>')
 
-                        # TODO: remove directory, if it is empty after moving out the file
-                        # if os.listdir(work_path) == []:
+                        if self.move is True:
+                            if os.listdir(os.path.dirname(source)) == []:
+                                os.remove(os.path.dirname(source))
+                                self._selective_logger('removed empty source directory <%s>', source)
                     else:
                         shutil.copy(source, target)
                         self.logger.info('copied file <' + source + '> to <' + target + '>')
