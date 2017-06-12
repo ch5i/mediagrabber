@@ -622,7 +622,13 @@ class MediaGrabber:
             if source != target:
 
                 if os.path.isfile(target):
-                    self.logger.warning('physical file <' + source + '> already exists in target:  <' + target + '>!')
+                    self.logger.info('physical file <' + source + '> already exists in target:  <' + target + '>!')
+
+                    # clean up if move
+                    if self.move is True:
+                        os.remove(source)
+                        self.logger.info('removed source file <%s>', source)
+                        self._remove_dir_if_empty(source)
 
                     if self.indexing_mode is True:
                         # target file exists, we're on a copy.
@@ -633,10 +639,7 @@ class MediaGrabber:
                         shutil.move(source, target)
                         self.logger.info('moved file <' + source + '> to <' + target + '>')
 
-                        if self.move is True:
-                            if os.listdir(os.path.dirname(source)) == []:
-                                os.remove(os.path.dirname(source))
-                                self._selective_logger('removed empty source directory <%s>', source)
+                        self._remove_dir_if_empty(source)
                     else:
                         shutil.copy(source, target)
                         self.logger.info('copied file <' + source + '> to <' + target + '>')
@@ -648,6 +651,13 @@ class MediaGrabber:
             if self.move is True:
                 filemode = 'move'
             self.logger.info('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
+
+    def _remove_dir_if_empty(self, source):
+        if self.move is True:
+            source_dir = os.path.dirname(source)
+            if not os.listdir(source_dir):
+                os.rmdir(source_dir)
+                self._selective_logger('removed empty source directory <%s>', source_dir)
 
     def _reset_sources(self):
         """
