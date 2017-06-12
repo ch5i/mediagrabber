@@ -20,6 +20,7 @@ Option | Long | Value | Description
 -p | --probe | `none` | do no touch files - preview only
 -q | --quiet | `none` | no processing output to console
 -v | --verbose | `none` | output verbose processing information to console
+-l | --logfile | *(optional: logfile)* | write logfile (optional: specify logfile name)
 -d | --debug | `none` | create detailed debug logfile
 
 
