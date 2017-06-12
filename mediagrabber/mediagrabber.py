@@ -218,6 +218,7 @@ class MediaGrabber:
         self.logger.info('> ignored    = %s', self.ignore_subfolder_patterns)
         self.logger.info('> move       = %s', self.move)
         self.logger.info('> dryrun     = %s', self.simulate)
+        self.logger.info('> verbose    = %s', self.verbose)
         self.logger.info('> quiet      = %s', self.quiet)
         self.logger.info('---')
 
