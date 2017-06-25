@@ -84,9 +84,10 @@ class MediaGrabber:
     def _init_stats(self):
         # set up stats counters
         self.stats = namedtuple('stats',
-                                ['file_count', 'db_count', 'skipped_files', 'removed_db_entries', 'total_time_file',
-                                 'total_time_db'])
+                                ['file_count', 'total_file_size', 'db_count', 'skipped_files', 'removed_db_entries',
+                                 'total_time_file', 'total_time_db'])
         self.stats.file_count = 0
+        self.stats.total_file_size = 0
         self.stats.db_count = 0
         self.stats.skipped_files = 0
         self.stats.removed_db_entries = 0
@@ -472,6 +473,7 @@ class MediaGrabber:
             for my_file in file_list:
                 start = timer()
                 file_count += 1
+                total_file_size_before = self.stats.total_file_size
                 emf = None
 
                 self._selective_logger('[' + str(file_count) + '] : ' + my_file)
@@ -538,10 +540,11 @@ class MediaGrabber:
                                       emf.file_properties['file_size'])
                 end = timer()
                 processing_time = end - start
+                processing_size_mb = (self.stats.total_file_size - total_file_size_before) / 1024 / 1024
                 total_time += processing_time
 
-                self._selective_logger('time: %ss / total: %ss', format(processing_time, '.3f'),
-                                       format(total_time, '.2f'))
+                self._selective_logger('time: %ss / total: %ss / size: %sMB', format(processing_time, '.3f'),
+                                       format(total_time, '.2f'), format(processing_size_mb, '.2f'))
                 self._selective_logger('---')
 
         # update stats counters
@@ -567,10 +570,12 @@ class MediaGrabber:
 
             # files
             if self.stats.file_count > 0:
+                file_size_mb = self.stats.total_file_size / 1024 / 1024
                 self.logger.info('files')
                 self.logger.info('> total            : %s', str(self.stats.file_count))
                 self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files))
                 self.logger.info('> skipped          : %s', str(self.stats.skipped_files))
+                self.logger.info('> added size       : %sMB', format(file_size_mb, '.2f'))
                 self.logger.info('> avg. time/file   : %ss',
                                  format(self.stats.total_time_file / self.stats.file_count, '.3f'))
                 self.logger.info('> total time       : %ss', format(self.stats.total_time_file, '.2f'))
@@ -635,6 +640,9 @@ class MediaGrabber:
                         self.logger.info('found extra copy: <' + source + '>')
                         # TODO: add option to prune extra copies
                 else:
+
+                    self.stats.total_file_size += emf.file_properties['file_size']
+
                     if self.move is True or self.indexing_mode is True:
                         shutil.move(source, target)
                         self.logger.info('moved file <' + source + '> to <' + target + '>')
