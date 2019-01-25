@@ -127,7 +127,12 @@ class DataBase:
 
         self.logger.debug('creating indexes')
         index_query = (
-            'CREATE UNIQUE INDEX unique_target_path_file ON file (target_path, target_filename);'
+            'CREATE UNIQUE INDEX idx_unique_target_path_file ON file (target_path, target_filename);'
+        )
+        self.execute_sql(index_query)
+
+        index_query = (
+            'CREATE UNIQUE INDEX idx_file_hash_md5 ON file (file_hash_md5);'
         )
         self.execute_sql(index_query)
 
@@ -248,7 +253,7 @@ class DataBase:
         sql = (
             'SELECT file_id FROM file '
             'WHERE '
-            "target_filename = '{0}' "
+            "target_filename like '{0}%' "
         ).format(target_file_name)
 
         db_result = self.execute_sql(sql)
@@ -262,9 +267,77 @@ class DataBase:
             self.logger.debug('target filename exists db: %s (id: %s)', target_file_name, exif_media_file.file_id)
             return True
 
-    def target_size_matches(self, exif_media_file: ExifMediaFile):
+    def file_date_type_matches(self, exif_media_file: ExifMediaFile):
         """
-        Check if target filename and file size match in db
+        Check if capture time and file type match in db
+
+        :param exif_media_file:
+        :return: bool
+        """
+
+        assert isinstance(exif_media_file, ExifMediaFile)
+
+        date_time_original = exif_media_file.file_properties['date_time_original']
+        file_type = exif_media_file.file_properties['file_type']
+
+        sql = (
+            'SELECT file_id FROM file '
+            'WHERE '
+            "date_time_original = '{0}' "
+            'AND '
+            "file_type = '{1}'"
+        ).format(date_time_original, file_type)
+
+        db_result = self.execute_sql(sql)
+        db_data = db_result.fetchone()
+        if db_data is None:
+            exif_media_file.file_id = None
+            self.logger.debug('no entry in db for capture time: %s', date_time_original)
+            return False
+        else:
+            exif_media_file.file_id = str(db_data[0])
+            self.logger.debug('entry for capture time exists db: %s (id: %s)', date_time_original,
+                              exif_media_file.file_id)
+            return True
+
+    def file_date_type_size_matches(self, exif_media_file: ExifMediaFile):
+        """
+        Check if there is a match for capture time, file type and file size in db
+
+        :param exif_media_file:
+        :return: bool
+        """
+
+        assert isinstance(exif_media_file, ExifMediaFile)
+
+        date_time_original = exif_media_file.file_properties['date_time_original']
+        file_type = exif_media_file.file_properties['file_type']
+        file_size = exif_media_file.file_properties['file_size']
+
+        sql = (
+            'SELECT file_id FROM file '
+            'WHERE '
+            "date_time_original = '{0}' "
+            'AND '
+            "file_type = '{1}' "
+            'AND '
+            "file_size = {2}"
+        ).format(date_time_original, file_type, file_size)
+
+        db_result = self.execute_sql(sql)
+        db_data = db_result.fetchone()
+        if db_data is None:
+            exif_media_file.file_id = None
+            self.logger.debug('no entry in db for capture time, type and size: %s', date_time_original)
+            return False
+        else:
+            # exif_media_file.file_id = str(db_data[0])
+            self.logger.debug('entry for capture time, file type and size exists db: %s', date_time_original)
+            return True
+
+    def file_size_matches(self, exif_media_file: ExifMediaFile):
+        """
+        Check if file size match in db
 
         :param exif_media_file: 
         :return: bool
@@ -272,16 +345,13 @@ class DataBase:
 
         assert isinstance(exif_media_file, ExifMediaFile)
 
-        target_filename = exif_media_file.file_properties['target_filename']
         file_size = exif_media_file.file_properties['file_size']
 
         sql = (
             'SELECT file_id FROM file '
             'WHERE '
-            "target_filename = '{0}' "
-            'AND '
             "file_size = {1}"
-        ).format(target_filename, file_size)
+        ).format(file_size)
 
         db_result = self.execute_sql(sql)
         db_data = db_result.fetchone()
@@ -294,9 +364,42 @@ class DataBase:
             exif_media_file.file_id = str(db_data[0])
             return True
 
-    def target_hash_matches(self, exif_media_file: ExifMediaFile):
+    def file_type_size_matches(self, exif_media_file: ExifMediaFile):
         """
-        Check if target filename and file hash value match in db
+        Check if there is a match for (file type, file size) in db
+
+        :param exif_media_file:
+        :return: bool
+        """
+
+        assert isinstance(exif_media_file, ExifMediaFile)
+
+        file_type = exif_media_file.file_properties['file_type']
+        file_size = exif_media_file.file_properties['file_size']
+
+        sql = (
+            'SELECT file_id FROM file '
+            'WHERE '
+            "file_type = '{0}' "
+            'AND '
+            "file_size = {1}"
+        ).format(file_type, file_size)
+
+        db_result = self.execute_sql(sql)
+        db_data = db_result.fetchone()
+
+        if db_data is None:
+            self.logger.debug('file type + size does not match')
+            exif_media_file.file_id = None
+            return False
+        else:
+            self.logger.debug('file type + size matches')
+            exif_media_file.file_id = str(db_data[0])
+            return True
+
+    def file_hash_matches(self, exif_media_file: ExifMediaFile):
+        """
+        Check if file hash value matches in db
 
         :param exif_media_file: 
         :return: bool
@@ -304,16 +407,13 @@ class DataBase:
 
         assert isinstance(exif_media_file, ExifMediaFile)
 
-        target_filename = exif_media_file.file_properties['target_filename']
         file_hash = exif_media_file.file_properties['file_hash_md5']
 
         sql = (
             'SELECT file_id FROM file '
             'WHERE '
-            "target_filename = '{0}' "
-            'AND '
-            "file_hash_md5 = '{1}'"
-        ).format(target_filename, file_hash)
+            "file_hash_md5 = '{0}'"
+        ).format(file_hash)
 
         db_result = self.execute_sql(sql)
         db_data = db_result.fetchone()
@@ -334,10 +434,12 @@ class DataBase:
         base_target_filename = exif_media_file.get_base_target_filename()
         target_file_extension = exif_media_file.file_properties['file_type'].lower()
         target_filename = exif_media_file.file_properties['target_filename']
+
         self.logger.debug('de-duplicating filename for:' + target_filename)
 
         counter = 1
         while not self._is_unique_target_filename(target_filename):
+            self.logger.debug('filename <' + target_filename + '> already exists - adding counter')
             target_filename = base_target_filename + '-' + str(counter) + '.' + target_file_extension
             counter += 1
         else:

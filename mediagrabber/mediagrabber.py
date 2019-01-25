@@ -333,7 +333,7 @@ class MediaGrabber:
 
         :return:
         """
-        # check if target file entriese in db are valid (drop invalid)
+        # check if target file entries in db are valid (drop invalid)
         self._validate_target_records()
         self.logger.info('')
 
@@ -479,7 +479,7 @@ class MediaGrabber:
                 self._selective_logger('[' + str(file_count) + '] : ' + my_file)
 
                 # check if source filename exists in db
-                if self.indexing_mode is False and self.db.source_exists(my_file):
+                if self.db.source_exists(my_file) and self.indexing_mode is False:
                     # is known source, skip
                     skipped_count += 1
                     self._selective_logger('file is a known source - skipping')
@@ -488,52 +488,62 @@ class MediaGrabber:
                     emf = ExifMediaFile(my_file, et)
                     emf.parse_exif_info()
 
-                    # check for matching target filename in db
-                    if self.db.target_filename_matches(emf):
-                        # if target fn matches:
-                        # check if sizes match
-                        if self.db.target_size_matches(emf):
-                            # probably duplicate, calculate & check md5 to make sure
+                    # check if there is an entry for this capture timestamp, type and size in db
+                    if self.db.file_date_type_size_matches(emf):
+                        # if match found for timestamp, type and size:
+                        # check if hash matches
+                        emf.calculate_md5()
+                        if self.db.file_hash_matches(emf):
+                            # md5 match: file is duplicate
+                            self._selective_logger('file is already in target (' + emf.get_target_filename() + ')')
+                            # add source entry for this file
+                            if self.indexing_mode is False:
+                                self._selective_logger('added as new source')
+                                self.db.add_source(emf)
+                                # skip (no file operation)
+                            else:
+                                # count as skipped if indexing
+                                skipped_count += 1
+                        else:
+                            # md5 is different,
+                            # insert with new target filename
+                            self.logger.warning('name collision - filename is already'
+                                                ' in target but with different content! (md5 mismatch)'
+                                                ' - inserting as new file - ' + emf.get_target_filename())
+                            self._insert_new_target_file(emf)
+                    else:
+                        # no match for (time, type, size)
+                        # check if (type, size) matches
+                        if self.db.file_type_size_matches(emf):
+                            # have a match, check md5 to be sure
                             emf.calculate_md5()
-                            if self.db.target_hash_matches(emf):
+                            if self.db.file_hash_matches(emf):
                                 # md5 match: file is duplicate
                                 self._selective_logger('file is already in target (' + emf.get_target_filename() + ')')
-                                # add source entry for this file
+                                skipped_count += 1
                                 if self.indexing_mode is False:
+                                    # add source entry for this file
                                     self._selective_logger('added as new source')
                                     self.db.add_source(emf)
                                     # skip (no file operation)
                                 else:
-                                    # count as skipped if indexing
-                                    skipped_count += 1
+                                    # remove file, if it is a copy
+                                    # TODO: check if the file is in the right place, else remove (or just log it)
+                                    # check first this is the original file
+                                    # if not original: check if original exists physically (right place?)
+                                    # if no: move/rename this file
+                                    # if yes: remove this copy (or log it as copy)
+                                    self.logger.debug("nothing to do")
                             else:
-                                # file has different md5 (but same target name; i.e. photo taken in same second)
-                                # insert with new target filename
-                                self.db.assign_unique_target_filename(emf)
-                                self.logger.warning('name collision - filename is already'
-                                                    ' in target but with different content! (md5 mismatch)'
-                                                    ' - inserting as new file - ' + emf.get_target_filename())
+                                # md5 doesn't match
+                                # no file of this type and size yet, insert file
+                                self.logger.info('inserting new file - ' + emf.get_target_filename())
                                 self._insert_new_target_file(emf)
-                        else:
-                            # file size does not match (but same target name; i.e. photo taken in same second)
-                            # insert with new target filename
-                            self.db.assign_unique_target_filename(emf)
-                            self.logger.warning('name collision - filename is already'
-                                                ' in target but with different content! (size mismatch)'
-                                                ' - inserting as new file - ' + emf.get_target_filename())
-                            self._insert_new_target_file(emf)
-                    else:
-                        # target filename does not yet exist
-                        # check md5 to see if we have the file already (unlikely)
-                        emf.calculate_md5()
-                        if self.db.target_hash_matches(emf):
-                            self.logger.warning('duplicate file content - content'
-                                                ' in target but with different filename!'
-                                                ' - inserting as new file - ' + emf.get_target_filename())
-                        else:
-                            self.logger.info('inserting new file - ' + emf.get_target_filename())
 
-                        self._insert_new_target_file(emf)
+                        else:
+                            # no file of this type and size yet, insert file
+                            self.logger.info('inserting new file - ' + emf.get_target_filename())
+                            self._insert_new_target_file(emf)
 
                 if emf is not None:
                     self.logger.debug('target name: %s, target size: %s', emf.get_target_filename(),
@@ -605,6 +615,9 @@ class MediaGrabber:
         # make sure we have md5 hash of file
         if emf.file_properties['file_hash_md5'] is None:
             emf.calculate_md5()
+
+        # make sure filename is unique
+        self.db.assign_unique_target_filename(emf)
 
         # add db record for file
         self.db.add_file(emf)
