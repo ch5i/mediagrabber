@@ -373,16 +373,16 @@ class MediaGrabber:
                 file_count += 1
                 self.logger.debug(db_file)
                 fn = os.path.join(self.target_dir, db_file['relative_path'], db_file['filename'])
+
+                self._selective_logger(
+                    '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
+
                 if not os.path.isfile(fn):
-                    self.logger.warning(
-                        '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
-                    self.logger.warningn('file does not exist - dropping target record')
+                    self.logger.warning("file '" + db_file['filename'] + "' does not exist - dropping target record")
                     # delete record
                     self.db.drop_target_record(db_file['file_id'])
                     removed_count += 1
                 else:
-                    self._selective_logger(
-                        '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
                     self._selective_logger("file exists in target - record is valid")
 
                 end = timer()

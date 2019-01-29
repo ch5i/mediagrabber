@@ -26,7 +26,7 @@ class MediaFile:
             'file_date': None
         }
         self.source_properties = {
-            'target_file_id': None,
+            'file_id': None,
             'source_path': None,
             'source_filename': None,
         }

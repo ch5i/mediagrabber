@@ -84,7 +84,7 @@ class DataBase:
             'source_id INTEGER PRIMARY KEY NOT NULL UNIQUE,'
             'source_path TEXT NOT NULL,'
             'source_filename TEXT NOT NULL,'
-            'target_file_id INTEGER NOT NULL'
+            'file_id INTEGER NOT NULL'
             ' REFERENCES file (file_id) '
             ' ON DELETE CASCADE'
             ' ON UPDATE CASCADE,'
@@ -222,7 +222,7 @@ class DataBase:
         source_filename = os.path.basename(source_file_path)
 
         sql = (
-            'SELECT target_file_id FROM source '
+            'SELECT file_id FROM source '
             'WHERE '
             "source_path = '{0}' "
             'AND '
@@ -516,7 +516,7 @@ class DataBase:
 
         # set file_id property of target in exif_media_file
         if exif_media_file.file_id is not None:
-            exif_media_file.source_properties['target_file_id'] = exif_media_file.file_id
+            exif_media_file.source_properties['file_id'] = exif_media_file.file_id
 
             source_fields_str = ','.join(exif_media_file.source_properties.keys())
             source_values_str = ','.join("'{0}'".format(v) for v in exif_media_file.source_properties.values())
@@ -532,7 +532,7 @@ class DataBase:
         """
         sql = (
             "SELECT *, 'db timestamps in GMT!' as 'note' FROM file f "
-            'INNER JOIN source s ON f.file_id = s.target_file_id '
+            'INNER JOIN source s (using file_id) '
             'ORDER by f.date_time_original DESC'
         )
 
