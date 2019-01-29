@@ -505,7 +505,8 @@ class MediaGrabber:
                                 self._selective_logger("ok, record for file exists: '" + db_fn + "'")
                             else:
                                 # file is a duplicate, remove
-                                self.logger.warning("duplicate found, removing '" + my_file + "'")
+                                self.logger.warning(
+                                    "duplicate found: original '" + db_fn + "' => removing duplicate: '" + my_file + "'")
                                 self._remove_file(my_file)
                         else:
                             # add source entry for this file
@@ -664,7 +665,7 @@ class MediaGrabber:
         # dry run?
         if not self.simulate:
             os.remove(file_path)
-            self.logger.info('removed file <' + file_path + '>')
+            self._selective_logger('removed file <' + file_path + '>')
             self._remove_dir_if_empty(os.path.abspath(file_path))
         else:
             self._selective_logger('simulated delete of file <' + file_path + '>')
