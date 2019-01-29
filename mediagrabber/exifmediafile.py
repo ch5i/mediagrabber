@@ -2,7 +2,6 @@
 # To change this template file, choose Tools | Templates
 # and open the template in the editor.
 
-import datetime
 import logging
 import os
 
@@ -45,7 +44,7 @@ class ExifMediaFile(ExifMixin, MediaFile):
         super().parse_exif_tags(self.full_path)
 
         # date_time_original
-        dto = self._get_date_from_timestamp(self.exif_data['CollapsedDateTimeOriginal'])
+        dto = self._get_date_from_timestamp(self, self.exif_data['CollapsedDateTimeOriginal'])
         self.file_properties['date_time_original'] = "{:%Y-%m-%d %H:%M:%S}".format(dto)
 
         # target_path
@@ -120,23 +119,6 @@ class ExifMediaFile(ExifMixin, MediaFile):
         if date_obj is not None:
             filename = "{:%Y-%m-%d %H.%M.%S}".format(date_obj)
         return filename
-
-    @classmethod
-    def _get_date_from_timestamp(cls, timestamp_str=''):
-        """
-        Helper method to convert an exif timestamp into a date
-
-        Takes a string representation of a timestamp and returns a date object
-        Date format YYYY:mm:dd HH:mm:ss
-        :param timestamp_str:
-        """
-        date_obj = None
-
-        if timestamp_str and cls._is_valid_timestamp_format(timestamp_str):
-            date_obj = datetime.datetime.strptime(timestamp_str, "%Y:%m:%d %H:%M:%S")
-
-        return date_obj
-
 
 if __name__ == "__main__":
     print("Running ExifMediaFile directly")

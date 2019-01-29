@@ -2,6 +2,7 @@
 # To change this template file, choose Tools | Templates
 # and open the template in the editor.
 
+import datetime
 import logging
 import re
 
@@ -35,6 +36,7 @@ class ExifMixin:
             'QuickTime:MediaCreateDate',
             'MediaCreateDate',
             'XMP:DateTime',
+            'File:FileName',
             'EXIF:ModifyDate',
             'File:FileCreateDate',
             'File:FileModifyDate'
@@ -138,18 +140,31 @@ class ExifMixin:
         """
 
         date_time_original = None
+        oldest_date_time_original = None
 
         for tag in self.exif_create_date_tags:
             if tag in self.exif_data:
-                if not date_time_original:
-                    date_time_original = self.exif_data[tag][:19]  # use only first 19chars
+                date_time_original = self.exif_data[tag][:19]  # use only first 19chars
+                if not self._is_valid_timestamp_format(date_time_original):
+                    # as a last resort, try fixing timestamp format (i.e., if coming from filename)
+                    date_time_original = self._try_fix_timestamp_format(date_time_original)
                     if not self._is_valid_timestamp_format(date_time_original):
                         date_time_original = None
 
+                if date_time_original is not None:
+                    if oldest_date_time_original is None:
+                        oldest_date_time_original = date_time_original
+                    else:
+                        dto = self._get_date_from_timestamp(self, date_time_original)
+                        odto = self._get_date_from_timestamp(self, oldest_date_time_original)
+                        # if dto is before odto, reassign
+                        if dto < odto:
+                            oldest_date_time_original = date_time_original
+
                 del self.exif_data[tag]  # remove all create date tags
 
-        self.exif_data['CollapsedDateTimeOriginal'] = date_time_original
-        self.logger.debug('collapsedDateTimeOriginal: %s', date_time_original)
+        self.exif_data['CollapsedDateTimeOriginal'] = oldest_date_time_original
+        self.logger.debug('collapsedDateTimeOriginal: %s', oldest_date_time_original)
 
         if not date_time_original:
             self.logger.error('Something went wrong, could not extract creation date...')
@@ -169,6 +184,35 @@ class ExifMixin:
             return True
         else:
             return False
+
+    @staticmethod
+    def _try_fix_timestamp_format(timestamp_str=''):
+        """
+        Helper method to try fixing timestamp format of string
+
+        Tries to convert timestamp to format 'YYYY:mm:dd HH:mm:ss' as used in exif tags
+        """
+        timestamp_str = re.sub(r'([1-9]\d{3})[.:-]([0-1]\d)[.:-]([0-3]\d)[ _]([0-2]\d)[.:]([0-5]\d)[.:]([0-5]\d)',
+                               r'\1:\2:\3 \4:\5:\6',
+                               str(timestamp_str))
+
+        return timestamp_str
+
+    @staticmethod
+    def _get_date_from_timestamp(cls, timestamp_str=''):
+        """
+        Helper method to convert an exif timestamp into a date
+
+        Takes a string representation of a timestamp and returns a date object
+        Date format YYYY:mm:dd HH:mm:ss
+        :param timestamp_str:
+        """
+        date_obj = None
+
+        if timestamp_str and cls._is_valid_timestamp_format(timestamp_str):
+            date_obj = datetime.datetime.strptime(timestamp_str, "%Y:%m:%d %H:%M:%S")
+
+        return date_obj
 
 
 if __name__ == "__main__":

@@ -373,15 +373,17 @@ class MediaGrabber:
                 file_count += 1
                 self.logger.debug(db_file)
                 fn = os.path.join(self.target_dir, db_file['relative_path'], db_file['filename'])
-                self._selective_logger(
-                    '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
                 if not os.path.isfile(fn):
-                    self._selective_logger('file does not exist - dropping target record')
+                    self.logger.warning(
+                        '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
+                    self.logger.warningn('file does not exist - dropping target record')
                     # delete record
                     self.db.drop_target_record(db_file['file_id'])
                     removed_count += 1
                 else:
-                    self._selective_logger("ok - file exists in target")
+                    self._selective_logger(
+                        '[' + str(file_count) + ']: ' + db_file['filename'] + ' (id:' + str(db_file['file_id']) + ')')
+                    self._selective_logger("file exists in target - record is valid")
 
                 end = timer()
                 processing_time = end - start
@@ -484,66 +486,38 @@ class MediaGrabber:
                     skipped_count += 1
                     self._selective_logger('file is a known source - skipping')
                 else:
-                    # if not known: get file info (without md5, to save time)
+                    # if not known: get file info
                     emf = ExifMediaFile(my_file, et)
                     emf.parse_exif_info()
+                    emf.calculate_md5()
 
-                    # check if there is an entry for this capture timestamp, type and size in db
-                    if self.db.file_date_type_size_matches(emf):
-                        # if match found for timestamp, type and size:
-                        # check if hash matches
-                        emf.calculate_md5()
-                        if self.db.file_hash_matches(emf):
-                            # md5 match: file is duplicate
-                            self._selective_logger('file is already in target (' + emf.get_target_filename() + ')')
+                    # check if hash matches
+                    if self.db.file_hash_matches(emf):
+                        # md5 match: file is duplicate
+                        # count as skipped
+                        skipped_count += 1
+
+                        db_path, db_fn = self.db.get_target_path_filename(emf)
+
+                        if self.indexing_mode is True:
+                            # check if this is the file which is already in the db - else delete (duplicate)
+                            if self._is_target_file(emf, my_file):
+                                self._selective_logger("ok, record for file exists: '" + db_fn + "'")
+                            else:
+                                # file is a duplicate, remove
+                                self.logger.warning("duplicate found, removing '" + my_file + "'")
+                                self._remove_file(my_file)
+                        else:
                             # add source entry for this file
-                            if self.indexing_mode is False:
-                                self._selective_logger('added as new source')
-                                self.db.add_source(emf)
-                                # skip (no file operation)
-                            else:
-                                # count as skipped if indexing
-                                skipped_count += 1
-                        else:
-                            # md5 is different,
-                            # insert with new target filename
-                            self.logger.warning('name collision - filename is already'
-                                                ' in target but with different content! (md5 mismatch)'
-                                                ' - inserting as new file - ' + emf.get_target_filename())
-                            self._insert_new_target_file(emf)
+                            self._selective_logger("file is already in target as '" + db_fn + "'")
+                            self._selective_logger('added as new source')
+                            self.db.add_source(emf)
+                            # skip (no file operation)
                     else:
-                        # no match for (time, type, size)
-                        # check if (type, size) matches
-                        if self.db.file_type_size_matches(emf):
-                            # have a match, check md5 to be sure
-                            emf.calculate_md5()
-                            if self.db.file_hash_matches(emf):
-                                # md5 match: file is duplicate
-                                self._selective_logger('file is already in target (' + emf.get_target_filename() + ')')
-                                skipped_count += 1
-                                if self.indexing_mode is False:
-                                    # add source entry for this file
-                                    self._selective_logger('added as new source')
-                                    self.db.add_source(emf)
-                                    # skip (no file operation)
-                                else:
-                                    # remove file, if it is a copy
-                                    # TODO: check if the file is in the right place, else remove (or just log it)
-                                    # check first this is the original file
-                                    # if not original: check if original exists physically (right place?)
-                                    # if no: move/rename this file
-                                    # if yes: remove this copy (or log it as copy)
-                                    self.logger.debug("nothing to do")
-                            else:
-                                # md5 doesn't match
-                                # no file of this type and size yet, insert file
-                                self.logger.info('inserting new file - ' + emf.get_target_filename())
-                                self._insert_new_target_file(emf)
-
-                        else:
-                            # no file of this type and size yet, insert file
-                            self.logger.info('inserting new file - ' + emf.get_target_filename())
-                            self._insert_new_target_file(emf)
+                        # md5 is different,
+                        # insert file
+                        self._selective_logger('new file found, inserting - ' + emf.get_target_filename())
+                        self._insert_new_target_file(emf)
 
                 if emf is not None:
                     self.logger.debug('target name: %s, target size: %s', emf.get_target_filename(),
@@ -570,6 +544,18 @@ class MediaGrabber:
 
         # display stats
         self._show_stats()
+
+    def _is_target_file(self, emf: ExifMediaFile, my_file):
+
+        db_path, db_fn = self.db.get_target_path_filename(emf)
+
+        if os.path.normpath(os.path.join(self.target_dir, db_path, db_fn)) == os.path.normpath(my_file):
+            # is target
+            return True
+
+        else:
+            # is not target file
+            return False
 
     def _show_stats(self):
 
@@ -610,7 +596,7 @@ class MediaGrabber:
                                  format(self.stats.total_time_file + self.stats.total_time_db, '.2f'))
                 self.logger.info('---')
 
-    def _insert_new_target_file(self, emf):
+    def _insert_new_target_file(self, emf: ExifMediaFile):
 
         # make sure we have md5 hash of file
         if emf.file_properties['file_hash_md5'] is None:
@@ -668,10 +654,20 @@ class MediaGrabber:
                     # TODO: Add return value (success/fail)
                     self.db.update_copy_flags(emf)
         else:
-            filemode = 'copy'
-            if self.move is True:
-                filemode = 'move'
-            self._selective_logger('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
+            if source != target:
+                filemode = 'copy'
+                if self.move is True:
+                    filemode = 'move'
+                self._selective_logger('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
+
+    def _remove_file(self, file_path):
+        # dry run?
+        if not self.simulate:
+            os.remove(file_path)
+            self.logger.info('removed file <' + file_path + '>')
+            self._remove_dir_if_empty(os.path.abspath(file_path))
+        else:
+            self._selective_logger('simulated delete of file <' + file_path + '>')
 
     def _remove_dir_if_empty(self, source):
         if self.move is True:

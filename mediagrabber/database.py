@@ -242,7 +242,7 @@ class DataBase:
         """
         Check if target filename has match in db
 
-        :param exif_media_file: 
+        :param exif_media_file:
         :return: bool
         """
 
@@ -439,7 +439,7 @@ class DataBase:
 
         counter = 1
         while not self._is_unique_target_filename(target_filename):
-            self.logger.debug('filename <' + target_filename + '> already exists - adding counter')
+            self.logger.info('filename <' + target_filename + '> already exists - adding counter')
             target_filename = base_target_filename + '-' + str(counter) + '.' + target_file_extension
             counter += 1
         else:
@@ -568,3 +568,20 @@ class DataBase:
     def drop_target_record(self, file_id):
         sql = 'DELETE FROM file WHERE file_id = {0}'.format(file_id)
         self.execute_sql(sql)
+
+    def get_target_path_filename(self, exif_media_file: ExifMediaFile):
+
+        assert isinstance(exif_media_file, ExifMediaFile)
+
+        if not exif_media_file.file_properties['file_hash_md5']:
+            exif_media_file.calculate_md5()
+
+        file_md5 = exif_media_file.file_properties['file_hash_md5']
+
+        sql = (
+            'SELECT target_path, target_filename FROM file '
+            'WHERE '
+            "file_hash_md5 = '{0}'"
+        ).format(file_md5)
+
+        return self.execute_sql(sql).fetchone()
