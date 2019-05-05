@@ -4,6 +4,7 @@
 
 import logging
 import os
+import re
 import sqlite3
 
 from exifmediafile import ExifMediaFile
@@ -435,7 +436,18 @@ class DataBase:
         target_file_extension = exif_media_file.file_properties['file_type'].lower()
         target_filename = exif_media_file.file_properties['target_filename']
 
-        self.logger.debug('de-duplicating filename for:' + target_filename)
+        # check if source_filename matches target but has counter - if yes, then use the source filename
+        # (used for indexing, to prevent problems caused by sort order of file list)
+        source_filename = exif_media_file.source_properties['source_filename']
+
+        # regex match - timestamp + "-" + counter
+        # 'YYYY-mm-dd HH.mm.ss-1.jpg'
+        filename_pattern = re.escape(base_target_filename) + r'-\d{1,3}\.' + re.escape(target_file_extension)
+        if re.match(filename_pattern, str(source_filename)):
+            target_filename = source_filename
+            self.logger.debug('match with counter identified')
+
+        self.logger.debug('de-duplicating filename for: ' + source_filename)
 
         counter = 1
         while not self._is_unique_target_filename(target_filename):
@@ -444,7 +456,7 @@ class DataBase:
             counter += 1
         else:
             exif_media_file.file_properties['target_filename'] = target_filename
-        self.logger.debug('de-duplicated filename:' + target_filename)
+        self.logger.debug('filename after de-duplication: ' + target_filename)
 
     def _is_unique_target_filename(self, target_filename):
         """
@@ -479,7 +491,6 @@ class DataBase:
         db_result = self.execute_sql(sql)
 
         # store file_id in emf object property
-        # TODO: Make this use cur.lastrowid
         sql = "SELECT file_id FROM file WHERE file_hash_md5 = '{0}'".format(
             exif_media_file.file_properties['file_hash_md5']
         )
@@ -570,7 +581,9 @@ class DataBase:
         self.execute_sql(sql)
 
     def get_target_path_filename(self, exif_media_file: ExifMediaFile):
-
+        """
+        get target path and filename by file hash
+        """
         assert isinstance(exif_media_file, ExifMediaFile)
 
         if not exif_media_file.file_properties['file_hash_md5']:

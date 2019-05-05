@@ -517,8 +517,9 @@ class MediaGrabber:
                     else:
                         # md5 is different,
                         # insert file
-                        self._selective_logger('new file found, inserting - ' + emf.get_target_filename())
+                        self._selective_logger('identified as new file')
                         self._insert_new_target_file(emf)
+                        self._selective_logger('created new file record: ' + emf.get_target_filename())
 
                 if emf is not None:
                     self.logger.debug('target name: %s, target size: %s', emf.get_target_filename(),
@@ -633,7 +634,7 @@ class MediaGrabber:
                     if self.move is True:
                         os.remove(source)
                         self.logger.info('removed source file <%s>', source)
-                        self._remove_dir_if_empty(source)
+                        self._remove_dir_if_empty(os.path.dirname(source))
 
                     if self.indexing_mode is True:
                         # target file exists, we're on a copy.
@@ -645,12 +646,11 @@ class MediaGrabber:
 
                     if self.move is True or self.indexing_mode is True:
                         shutil.move(source, target)
-                        self.logger.info('moved file <' + source + '> to <' + target + '>')
-
-                        self._remove_dir_if_empty(source)
+                        self.logger.info('moved file to <' + target + '>')
+                        self._remove_dir_if_empty(os.path.dirname(source))
                     else:
                         shutil.copy(source, target)
-                        self.logger.info('copied file <' + source + '> to <' + target + '>')
+                        self.logger.info('copied file to <' + target + '>')
 
                     # TODO: Add return value (success/fail)
                     self.db.update_copy_flags(emf)
@@ -659,23 +659,25 @@ class MediaGrabber:
                 filemode = 'copy'
                 if self.move is True:
                     filemode = 'move'
-                self._selective_logger('simulated ' + filemode + ' of file <' + source + '> to <' + target + '>')
+                self._selective_logger('simulated ' + filemode + ' of file to <' + target + '>')
 
     def _remove_file(self, file_path):
         # dry run?
         if not self.simulate:
             os.remove(file_path)
             self._selective_logger('removed file <' + file_path + '>')
-            self._remove_dir_if_empty(os.path.abspath(file_path))
+            self._remove_dir_if_empty(os.path.dirname(file_path))
         else:
             self._selective_logger('simulated delete of file <' + file_path + '>')
 
-    def _remove_dir_if_empty(self, source):
-        if self.move is True:
-            source_dir = os.path.dirname(source)
+    def _remove_dir_if_empty(self, source_dir):
+        if not self.simulate:
+            parent_dir = os.path.abspath(os.path.join(source_dir, os.pardir))
             if not os.listdir(source_dir):
                 os.rmdir(source_dir)
                 self._selective_logger('removed empty source directory <%s>', source_dir)
+                # recursively call again to remove empty dirs up to first non-empty parent dir
+                self._remove_dir_if_empty(parent_dir)
 
     def _reset_sources(self):
         """
@@ -709,7 +711,8 @@ class MediaGrabber:
                     if self._filter_file_by_ext(fn, self.file_extensions):
                         self.logger.debug('added file: %s', fn)
                         file_list.append(fn)
-
+        # sort file list
+        file_list.sort()
         return file_list
 
 
