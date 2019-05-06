@@ -35,9 +35,8 @@ class ExifMixin:
             'H264:DateTimeOriginal',
             'QuickTime:MediaCreateDate',
             'MediaCreateDate',
-            'XMP:DateTime',
-            'File:FileName',
             'EXIF:ModifyDate',
+            'File:FileName',
             'File:FileCreateDate',
             'File:FileModifyDate'
         ]
@@ -152,6 +151,7 @@ class ExifMixin:
                         date_time_original = None
 
                 if date_time_original is not None:
+                    self.logger.debug('tag: %s, dto: %s, odto: %s', tag, date_time_original, oldest_date_time_original)
                     if oldest_date_time_original is None:
                         oldest_date_time_original = date_time_original
                     else:
@@ -162,6 +162,7 @@ class ExifMixin:
                             oldest_date_time_original = date_time_original
 
                 del self.exif_data[tag]  # remove all create date tags
+                # (so that in the end there is only our own timestamp 'CollapsedDateTimeOriginal')
 
         self.exif_data['CollapsedDateTimeOriginal'] = oldest_date_time_original
         self.logger.debug('collapsedDateTimeOriginal: %s', oldest_date_time_original)
