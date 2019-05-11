@@ -441,8 +441,15 @@ class MediaGrabber:
 
         # init stats counters
         total_time = 0
+        total_files = 0
         file_count = 0
         skipped_count = 0
+        last_times = []
+        avg_time = 0
+        min_timer_samples = 10
+
+        # init file list
+        file_list = []
 
         self._selective_logger('---')
 
@@ -458,19 +465,25 @@ class MediaGrabber:
             my_path = os.path.abspath(my_path)
 
             self._selective_logger('getting list of files in "' + my_path + '" ...')
-            file_list = self._get_file_list(my_path)
+            cur_dir_file_list = self._get_file_list(my_path)
 
-            nof_files = len(file_list)
+            nof_files = len(cur_dir_file_list)
 
             if nof_files > 0:
+                file_list.extend(cur_dir_file_list)
+                total_files += nof_files
                 self._selective_logger(
-                    'found ' + str(nof_files) + ' files to process (' + str(file_count + 1) + ' - ' + str(
-                        file_count + nof_files) + ')')
+                    'found ' + str(nof_files) + ' files to process')
+
             else:
                 self.logger.info('directory contains no files for processing')
 
             self._selective_logger('---')
 
+        if len(file_list) == 0:
+            # nothing to do
+            self.logger.info('no files for process!')
+        else:
             # iterate over source files and import new files to target
             for my_file in file_list:
                 start = timer()
@@ -478,7 +491,7 @@ class MediaGrabber:
                 total_file_size_before = self.stats.total_file_size
                 emf = None
 
-                self._selective_logger('[' + str(file_count) + '] : ' + my_file)
+                self._selective_logger('[' + str(file_count) + ' / ' + str(total_files) + '] : ' + my_file)
 
                 # check if source filename exists in db
                 if self.db.source_exists(my_file) and self.indexing_mode is False:
@@ -529,8 +542,21 @@ class MediaGrabber:
                 processing_size_mb = (self.stats.total_file_size - total_file_size_before) / 1024 / 1024
                 total_time += processing_time
 
-                self._selective_logger('time: %ss / total: %ss / size: %sMB', format(processing_time, '.3f'),
-                                       format(total_time, '.2f'), format(processing_size_mb, '.2f'))
+                # update average time
+                if len(last_times) > min_timer_samples:
+                    last_times.pop(0)  # remove oldest value
+                last_times.append(processing_time)
+                avg_time = sum(last_times) / float(len(last_times))
+
+                # show some stats in verbose mode
+                self._selective_logger('time: %ss (avg: %s) / total: %ss / size: %sMB / remaining: %s files (~%s s)',
+                                       format(processing_time, '.3f'),
+                                       format(avg_time, '.3f'),
+                                       format(total_time, '.2f'),
+                                       format(processing_size_mb, '.2f'),
+                                       str(total_files - file_count),
+                                       format((total_files - file_count) * avg_time, '.0f')
+                                       )
                 self._selective_logger('---')
 
         # update stats counters
