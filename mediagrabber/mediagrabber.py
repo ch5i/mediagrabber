@@ -492,8 +492,8 @@ class MediaGrabber:
                 emf = None
 
                 self._selective_logger(
-                    '[' + str(file_count) + ' / ' + str(total_files) + '] (' + format((file_count / total_files),
-                                                                                      '.0f') + '%): ' + my_file)
+                    '[' + str(file_count) + ' / ' + str(total_files) + '] (' + format((file_count / total_files) * 100,
+                                                                                      '.1f') + '%): ' + my_file)
 
                 # check if source filename exists in db
                 if self.db.source_exists(my_file) and self.indexing_mode is False:
