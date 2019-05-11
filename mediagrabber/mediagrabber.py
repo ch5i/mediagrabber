@@ -491,7 +491,9 @@ class MediaGrabber:
                 total_file_size_before = self.stats.total_file_size
                 emf = None
 
-                self._selective_logger('[' + str(file_count) + ' / ' + str(total_files) + '] : ' + my_file)
+                self._selective_logger(
+                    '[' + str(file_count) + ' / ' + str(total_files) + '] (' + format((file_count / total_files),
+                                                                                      '.0f') + '%): ' + my_file)
 
                 # check if source filename exists in db
                 if self.db.source_exists(my_file) and self.indexing_mode is False:
@@ -549,7 +551,7 @@ class MediaGrabber:
                 avg_time = sum(last_times) / float(len(last_times))
 
                 # show some stats in verbose mode
-                self._selective_logger('time: %ss (avg: %s) / total: %ss / size: %sMB / remaining: %s files (~%s s)',
+                self._selective_logger('time: %ss / avg: %s | total: %ss | size: %sMB | remaining: %s files / ~%ss',
                                        format(processing_time, '.3f'),
                                        format(avg_time, '.3f'),
                                        format(total_time, '.2f'),
